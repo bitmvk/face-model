@@ -234,6 +234,7 @@ device = None
 # -------------------- Inference helpers --------------------
 TARGET_SIZE = 256  # Must match training
 
+
 def letterbox_image(image):
     """
     Resize image with letterboxing to TARGET_SIZE and return tensor + parameters.
@@ -249,10 +250,12 @@ def letterbox_image(image):
     pad_top = (TARGET_SIZE - new_h) // 2
     padded.paste(resized, (pad_left, pad_top))
 
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
     tensor = transform(padded)
     return tensor, scale, pad_left, pad_top
 
@@ -285,7 +288,15 @@ def extract_detection(outputs, orig_w, orig_h, scale, pad_left, pad_top):
     rey_orig = int((rey_pad - pad_top) / scale)
 
     conf = 1.0  # confidence not predicted
-    return x_orig, y_orig, w_orig, h_orig, conf, (lex_orig, ley_orig), (rex_orig, rey_orig)
+    return (
+        x_orig,
+        y_orig,
+        w_orig,
+        h_orig,
+        conf,
+        (lex_orig, ley_orig),
+        (rex_orig, rey_orig),
+    )
 
 
 def load_model_if_needed(model_path, device_type):
@@ -378,11 +389,17 @@ def run_inference_from_id(
         img_np_gt = np.array(orig_img)
         if show_bbox:
             x, y, w, h = bbox["x"], bbox["y"], bbox["width"], bbox["height"]
-            cv2.rectangle(img_np_gt, (x, y), (x + w, y + h), (0, 255, 0), line_thickness)
+            cv2.rectangle(
+                img_np_gt, (x, y), (x + w, y + h), (0, 255, 0), line_thickness
+            )
         if show_left_eye:
-            cv2.circle(img_np_gt, landmarks["left_eye"], line_thickness * 2, (255, 0, 0), -1)
+            cv2.circle(
+                img_np_gt, landmarks["left_eye"], line_thickness * 2, (255, 0, 0), -1
+            )
         if show_right_eye:
-            cv2.circle(img_np_gt, landmarks["right_eye"], line_thickness * 2, (0, 0, 255), -1)
+            cv2.circle(
+                img_np_gt, landmarks["right_eye"], line_thickness * 2, (0, 0, 255), -1
+            )
         dataset_output = Image.fromarray(img_np_gt)
         dataset_info = f"Dataset ({dataset_version}): BBox: ({bbox['x']}, {bbox['y']}, {bbox['width']}, {bbox['height']}) | Left Eye: {landmarks['left_eye']} | Right Eye: {landmarks['right_eye']}"
 
@@ -402,7 +419,9 @@ def run_inference_from_id(
         # Draw inference
         img_np_infer = np.array(orig_img)
         if show_bbox:
-            cv2.rectangle(img_np_infer, (x, y), (x + w, y + h), (0, 255, 0), line_thickness)
+            cv2.rectangle(
+                img_np_infer, (x, y), (x + w, y + h), (0, 255, 0), line_thickness
+            )
         if show_left_eye:
             cv2.circle(img_np_infer, left_eye, line_thickness * 2, (255, 0, 0), -1)
         if show_right_eye:
@@ -475,7 +494,7 @@ with gr.Blocks(title="Face Detection Demo") as demo:
                     info="Full: uses bbox_and_eyes.csv (actual bbox) | Aligned: uses list_landmarks_align_celeba.txt (calculated bbox)",
                 )
                 model_path = gr.Textbox(
-                    value="mobile_face_detector.pth", label="Model Path"
+                    value="mobile_face_detector-2.pth", label="Model Path"
                 )
                 device_type = gr.Radio(["cuda", "cpu"], value="cuda", label="Device")
                 show_bbox = gr.Checkbox(value=True, label="Show Bounding Box")
@@ -515,4 +534,4 @@ with gr.Blocks(title="Face Detection Demo") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(share=True)
+    demo.launch()
