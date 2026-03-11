@@ -165,7 +165,7 @@ def load_model(model_path, device_type="cuda"):
 
 
 def main():
-    model_path = Path(__file__).parent / "mobile_face_detector-2.pth"
+    model_path = Path(__file__).parent / "mobile_face_detector_epoch_10.pth"
 
     if not model_path.exists():
         print(f"Model not found: {model_path}")
