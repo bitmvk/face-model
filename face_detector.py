@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Train MobileFaceDetector on CelebA dataset with letterboxing and scale augmentation.
-Fixed transform: annotation coordinates now correctly account for random scaling.
+Train MobileFaceDetector on CelebA dataset with letterboxing, scale augmentation,
+and rotation augmentation (using PIL with expand=True and correct coordinate transforms).
 """
 
 import argparse
 import csv
 import os
 import random
-import time  # <-- added for elapsed time
+import time
+import math
 from pathlib import Path
 
 import torch
@@ -128,11 +129,15 @@ class CelebADataset(Dataset):
         max_samples=None,
         target_size=224,
         augment_scale=False,
+        augment_rotation=False,
+        max_rotation_angle=30,
     ):
         self.data_dir = Path(data_dir)
         self.transform = transform
         self.target_size = target_size
         self.augment_scale = augment_scale
+        self.augment_rotation = augment_rotation
+        self.max_rotation_angle = max_rotation_angle
 
         img_dir = self.data_dir / "img_celeba"
         if not img_dir.exists():
@@ -162,25 +167,140 @@ class CelebADataset(Dataset):
     def __len__(self):
         return len(self.file_list)
 
+    def _rotate_point(self, x, y, angle, cx, cy, new_cx, new_cy):
+        """Rotate point (x,y) about (cx,cy) by angle degrees and translate to new center.
+        Uses -angle to match PIL's counter-clockwise rotation in Y-down coordinate system."""
+        rad = math.radians(-angle)
+        x_rel = x - cx
+        y_rel = y - cy
+        x_rot = x_rel * math.cos(rad) - y_rel * math.sin(rad)
+        y_rot = x_rel * math.sin(rad) + y_rel * math.cos(rad)
+        x_new = x_rot + new_cx
+        y_new = y_rot + new_cy
+        return x_new, y_new
+
     def __getitem__(self, idx):
         img_path = self.file_list[idx]
         img = Image.open(img_path).convert("RGB")
         orig_w, orig_h = img.size
 
-        # Random scaling augmentation (simulate different face sizes)
+        # Get annotation (or default)
+        img_id = img_path.name
+        if img_id in self.annotations:
+            ann = self.annotations[img_id].copy()  # copy to avoid modifying original
+        else:
+            ann = default_annotation(orig_w, orig_h)
+
+        # ---------- ROTATION AUGMENTATION ----------
+        if self.augment_rotation:
+            # Random angle within [-max_rotation_angle, max_rotation_angle]
+            angle = random.uniform(-self.max_rotation_angle, self.max_rotation_angle)
+
+            # Compute new dimensions after rotation with expand=True
+            rad = math.radians(angle)
+            new_w = int(
+                round(orig_w * abs(math.cos(rad)) + orig_h * abs(math.sin(rad)))
+            )
+            new_h = int(
+                round(orig_w * abs(math.sin(rad)) + orig_h * abs(math.cos(rad)))
+            )
+
+            # Rotate image
+            img = img.rotate(angle, expand=True, fillcolor=0, resample=Image.BILINEAR)
+
+            # Rotation center (original image center)
+            cx_orig = orig_w / 2.0
+            cy_orig = orig_h / 2.0
+            new_cx = new_w / 2.0
+            new_cy = new_h / 2.0
+
+            # Transform bounding box corners
+            corners = [
+                (ann["x"], ann["y"]),
+                (ann["x"] + ann["w"], ann["y"]),
+                (ann["x"], ann["y"] + ann["h"]),
+                (ann["x"] + ann["w"], ann["y"] + ann["h"]),
+            ]
+            new_corners = []
+            for x, y in corners:
+                nx, ny = self._rotate_point(
+                    x, y, angle, cx_orig, cy_orig, new_cx, new_cy
+                )
+                new_corners.append((nx, ny))
+
+            # Compute new axis-aligned bounding box
+            xs = [p[0] for p in new_corners]
+            ys = [p[1] for p in new_corners]
+
+            # Clamp to image boundaries
+            new_x = max(0, min(xs))
+            new_y = max(0, min(ys))
+            max_x = min(new_w, max(xs))
+            max_y = min(new_h, max(ys))
+
+            new_w_bbox = max_x - new_x
+            new_h_bbox = max_y - new_y
+
+            # Transform eyes
+            new_left_eye = self._rotate_point(
+                ann["left_eye"][0],
+                ann["left_eye"][1],
+                angle,
+                cx_orig,
+                cy_orig,
+                new_cx,
+                new_cy,
+            )
+            new_right_eye = self._rotate_point(
+                ann["right_eye"][0],
+                ann["right_eye"][1],
+                angle,
+                cx_orig,
+                cy_orig,
+                new_cx,
+                new_cy,
+            )
+
+            # Update annotation and image size
+            ann.update(
+                {
+                    "x": new_x,
+                    "y": new_y,
+                    "w": new_w_bbox,
+                    "h": new_h_bbox,
+                    "left_eye": new_left_eye,
+                    "right_eye": new_right_eye,
+                }
+            )
+            orig_w, orig_h = new_w, new_h
+
+        # ---------- SCALE AUGMENTATION ----------
         if self.augment_scale:
             scale_factor = random.uniform(0.5, 1.0)
             new_w = int(orig_w * scale_factor)
             new_h = int(orig_h * scale_factor)
             img = img.resize((new_w, new_h), Image.BILINEAR)
-        else:
-            scale_factor = 1.0
-            new_w, new_h = orig_w, orig_h
 
-        # Letterbox to target_size
-        scale = min(self.target_size / new_w, self.target_size / new_h)
-        new_w2 = int(new_w * scale)
-        new_h2 = int(new_h * scale)
+            # Scale annotation
+            ann["x"] *= scale_factor
+            ann["y"] *= scale_factor
+            ann["w"] *= scale_factor
+            ann["h"] *= scale_factor
+            ann["left_eye"] = (
+                ann["left_eye"][0] * scale_factor,
+                ann["left_eye"][1] * scale_factor,
+            )
+            ann["right_eye"] = (
+                ann["right_eye"][0] * scale_factor,
+                ann["right_eye"][1] * scale_factor,
+            )
+
+            orig_w, orig_h = new_w, new_h
+
+        # ---------- LETTERBOX ----------
+        scale = min(self.target_size / orig_w, self.target_size / orig_h)
+        new_w2 = int(orig_w * scale)
+        new_h2 = int(orig_h * scale)
         img_resized = img.resize((new_w2, new_h2), Image.BILINEAR)
 
         padded_img = Image.new("RGB", (self.target_size, self.target_size), (0, 0, 0))
@@ -191,49 +311,38 @@ class CelebADataset(Dataset):
         if self.transform:
             padded_img = self.transform(padded_img)
 
-        # Get annotation (or default)
-        img_id = img_path.name
-        if img_id in self.annotations:
-            ann = self.annotations[img_id]
-        else:
-            ann = default_annotation(orig_w, orig_h)
-
-        # Apply random scale to annotation coordinates
-        x = ann["x"] * scale_factor
-        y = ann["y"] * scale_factor
-        w = ann["w"] * scale_factor
-        h = ann["h"] * scale_factor
-        le_x = ann["left_eye"][0] * scale_factor
-        le_y = ann["left_eye"][1] * scale_factor
-        re_x = ann["right_eye"][0] * scale_factor
-        re_y = ann["right_eye"][1] * scale_factor
-
-        # Apply letterbox scale and padding
-        x_pad = x * scale + pad_left
-        y_pad = y * scale + pad_top
-        w_pad = w * scale
-        h_pad = h * scale
-        le_x_pad = le_x * scale + pad_left
-        le_y_pad = le_y * scale + pad_top
-        re_x_pad = re_x * scale + pad_left
-        re_y_pad = re_y * scale + pad_top
+        # Apply letterbox scaling and padding to annotation
+        x = ann["x"] * scale + pad_left
+        y = ann["y"] * scale + pad_top
+        w = ann["w"] * scale
+        h = ann["h"] * scale
+        le_x = ann["left_eye"][0] * scale + pad_left
+        le_y = ann["left_eye"][1] * scale + pad_top
+        re_x = ann["right_eye"][0] * scale + pad_left
+        re_y = ann["right_eye"][1] * scale + pad_top
 
         # Normalize to [0,1] relative to padded image size
         target = torch.tensor(
             [
-                x_pad / self.target_size,
-                y_pad / self.target_size,
-                w_pad / self.target_size,
-                h_pad / self.target_size,
-                le_x_pad / self.target_size,
-                le_y_pad / self.target_size,
-                re_x_pad / self.target_size,
-                re_y_pad / self.target_size,
+                x / self.target_size,
+                y / self.target_size,
+                w / self.target_size,
+                h / self.target_size,
+                le_x / self.target_size,
+                le_y / self.target_size,
+                re_x / self.target_size,
+                re_y / self.target_size,
             ],
             dtype=torch.float32,
         )
 
-        metadata = (orig_w, orig_h, scale, pad_left, pad_top)
+        metadata = (
+            orig_w,
+            orig_h,
+            scale,
+            pad_left,
+            pad_top,
+        )  # dimensions after rotation/scale
         return padded_img, target, metadata
 
 
@@ -291,7 +400,7 @@ def train_model(
     criterion_reg = nn.SmoothL1Loss()
     landmark_weight = 5.0
 
-    start_time = time.time()  # <-- start time for elapsed time calculation
+    start_time = time.time()
 
     epoch = start_epoch
     while True:
@@ -382,7 +491,11 @@ def train_model(
             print(f"Checkpoint saved: {checkpoint_path}")
 
         # Stop condition: both eyes meet target individually
-        if mean_iou_pct >= target_iou and left_eye_acc_pct >= target_eye_acc and right_eye_acc_pct >= target_eye_acc:
+        if (
+            mean_iou_pct >= target_iou
+            and left_eye_acc_pct >= target_eye_acc
+            and right_eye_acc_pct >= target_eye_acc
+        ):
             print(f"\nTarget metrics achieved. Stopping training.")
             break
 
@@ -451,6 +564,18 @@ def main():
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed (default: 42)"
     )
+    # New arguments for rotation augmentation
+    parser.add_argument(
+        "--augment_rotation",
+        action="store_true",
+        help="Enable random rotation augmentation",
+    )
+    parser.add_argument(
+        "--max_rotation_angle",
+        type=float,
+        default=30,
+        help="Maximum rotation angle in degrees (default: 30)",
+    )
     args = parser.parse_args()
 
     # Set random seeds for reproducibility
@@ -476,6 +601,8 @@ def main():
         max_samples=200000,
         target_size=args.target_size,
         augment_scale=True,
+        augment_rotation=args.augment_rotation,
+        max_rotation_angle=args.max_rotation_angle,
     )
     val_dataset = CelebADataset(
         args.data_dir,
@@ -484,6 +611,7 @@ def main():
         max_samples=20000,
         target_size=args.target_size,
         augment_scale=False,
+        augment_rotation=False,  # no augmentation on validation
     )
 
     train_loader = DataLoader(
