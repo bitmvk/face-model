@@ -95,6 +95,11 @@ def main():
         default="weights",
         help="Directory to save checkpoints",
     )
+    parser.add_argument(
+        "--train_only_head",
+        action="store_true",
+        help="Freeze backbone and only train the detection head",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -167,6 +172,7 @@ def main():
         lr=args.lr,
         device=device,
         checkpoint_dir=args.checkpoint_dir,
+        train_only_head=args.train_only_head,
     )
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

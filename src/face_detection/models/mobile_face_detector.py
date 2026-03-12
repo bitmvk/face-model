@@ -62,11 +62,11 @@ class MobileFaceDetector(nn.Module):
             InvertedResidual(128, 128, 1, 6),
         )
 
-        self.spatial_pool = nn.AdaptiveAvgPool2d((7, 7))
+        self.spatial_pool = nn.AdaptiveAvgPool2d((8, 8))
         self.flatten = nn.Flatten()
 
         self.shared_features = nn.Sequential(
-            nn.Linear(128 * 7 * 7, 256), nn.ReLU6(inplace=True), nn.Dropout(0.2)
+            nn.Linear(128 * 8 * 8, 256), nn.ReLU6(inplace=True), nn.Dropout(0.2)
         )
 
         self.reg_head = nn.Linear(256, 8)

@@ -48,9 +48,23 @@ def train_model(
     start_epoch=0,
     checkpoint_dir=".",
     checkpoint_interval=10,
+    train_only_head=False,
 ):
     model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    head_layers = [model.shared_features, model.reg_head]
+    if train_only_head:
+        for param in model.parameters():
+            param.requires_grad = False
+        for layer in head_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
+        optimizer = torch.optim.Adam(
+            [p for p in model.parameters() if p.requires_grad], lr=lr
+        )
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=3
     )
