@@ -157,15 +157,14 @@ def extract_detection(outputs, orig_w, orig_h, scale, pad_left, pad_top):
 
 def load_model(model_path, device_type="cuda"):
     device = torch.device(device_type if torch.cuda.is_available() else "cpu")
-    model = MobileFaceDetector()
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = torch.jit.load(model_path, map_location=device)
     model.to(device)
     model.eval()
     return model, device
 
 
 def main():
-    model_path = Path(__file__).parent / "mobile_face_detector_epoch_10.pth"
+    model_path = Path(__file__).parent / "mobile_face_detector.pt"
 
     if not model_path.exists():
         print(f"Model not found: {model_path}")
