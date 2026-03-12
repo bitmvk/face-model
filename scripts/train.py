@@ -157,7 +157,18 @@ def main():
 
     if args.pretrained and os.path.exists(args.pretrained):
         print(f"Loading pretrained weights from {args.pretrained}")
-        model.load_state_dict(torch.load(args.pretrained, map_location=device))
+        if args.train_only_head:
+            pretrained_state = torch.load(args.pretrained, map_location=device)
+            backbone_keys = ["stem", "blocks", "spatial_pool"]
+            backbone_state = {
+                k: v
+                for k, v in pretrained_state.items()
+                if any(k.startswith(key) for key in backbone_keys)
+            }
+            model.load_state_dict(backbone_state, strict=False)
+            print(f"Loaded backbone weights. Head layers will be trained from scratch.")
+        else:
+            model.load_state_dict(torch.load(args.pretrained, map_location=device))
     elif args.pretrained:
         print(
             f"Warning: Pretrained file {args.pretrained} not found. Training from scratch."
