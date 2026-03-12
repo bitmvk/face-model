@@ -9,5 +9,19 @@ wheels/
 # Virtual environments
 .venv
 
+# IDE
+.vscode/
+.idea/
+
+# Cache
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Gradio
+.gradio/
+
+# Dataset (large files)
 Dataset/
 Dataset.zip
+
+# Keep weights tracked in git

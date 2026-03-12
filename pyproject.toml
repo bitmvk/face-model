@@ -1,7 +1,7 @@
 [project]
 name = "face-detection"
 version = "0.1.0"
-description = "Add your description here"
+description = "Mobile face detector trained on CelebA dataset"
 readme = "README.md"
 requires-python = ">=3.13, <3.14"
 dependencies = [
@@ -19,6 +19,12 @@ dependencies = [
     "onnxruntime>=1.24.3",
 ]
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [[tool.uv.index]]
 name = "pytorch-cu124"
