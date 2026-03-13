@@ -100,6 +100,12 @@ def main():
         action="store_true",
         help="Freeze backbone and only train the detection head",
     )
+    parser.add_argument(
+        "--log_file",
+        type=str,
+        default="logs/training.log",
+        help="Path to log file for training metrics (default: logs/training.log)",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -174,16 +180,30 @@ def main():
             f"Warning: Pretrained file {args.pretrained} not found. Training from scratch."
         )
 
+    config = {
+        "pretrained": args.pretrained if args.pretrained else "None",
+        "train_only_head": args.train_only_head,
+        "lr": args.lr,
+        "batch_size": args.batch_size,
+        "target_iou": args.target_iou,
+        "target_eye_acc": args.target_eye_acc,
+        "device": device,
+        "data_dir": args.data_dir,
+        "target_size": args.target_size,
+        "train_samples": len(train_dataset),
+        "val_samples": len(val_dataset),
+        "augment_scale": True,
+        "augment_rotation": args.augment_rotation,
+        "max_rotation_angle": args.max_rotation_angle,
+        "checkpoint_dir": args.checkpoint_dir,
+        "log_file": args.log_file,
+    }
+
     model = train_model(
         model,
         train_loader,
         val_loader,
-        target_iou=args.target_iou,
-        target_eye_acc=args.target_eye_acc,
-        lr=args.lr,
-        device=device,
-        checkpoint_dir=args.checkpoint_dir,
-        train_only_head=args.train_only_head,
+        config=config,
     )
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

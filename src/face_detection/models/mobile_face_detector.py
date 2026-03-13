@@ -70,6 +70,7 @@ class MobileFaceDetector(nn.Module):
         )
 
         self.reg_head = nn.Linear(256, 8)
+        self.conf_head = nn.Linear(256, 1)
 
     def forward(self, x):
         x = self.stem(x)
@@ -79,4 +80,5 @@ class MobileFaceDetector(nn.Module):
 
         features = self.shared_features(x)
         coords = self.reg_head(features)
-        return coords
+        conf_logits = self.conf_head(features)
+        return coords, conf_logits
