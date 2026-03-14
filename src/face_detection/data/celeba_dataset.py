@@ -220,11 +220,4 @@ class CelebADataset(Dataset):
             dtype=torch.float32,
         )
 
-        metadata = (
-            orig_w,
-            orig_h,
-            scale,
-            pad_left,
-            pad_top,
-        )
-        return padded_img, target, metadata
+        return padded_img, target, 1

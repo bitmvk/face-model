@@ -14,6 +14,8 @@ from torch.utils.data import DataLoader
 
 from face_detection import (
     CelebADataset,
+    COCONoHumanDataset,
+    MixedDataset,
     MobileFaceDetector,
     train_model,
 )
@@ -106,6 +108,18 @@ def main():
         default="logs/training.log",
         help="Path to log file for training metrics (default: logs/training.log)",
     )
+    parser.add_argument(
+        "--coco_dir",
+        type=str,
+        default=None,
+        help="Path to COCO dataset root (e.g., Dataset/). If provided, mixes COCO images at 2:1 ratio",
+    )
+    parser.add_argument(
+        "--coco_ratio",
+        type=int,
+        default=2,
+        help="Number of COCO images to use per face image (default: 2)",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -123,7 +137,7 @@ def main():
         ]
     )
 
-    train_dataset = CelebADataset(
+    face_train_dataset = CelebADataset(
         args.data_dir,
         transform=transform,
         start_idx=0,
@@ -133,6 +147,36 @@ def main():
         augment_rotation=args.augment_rotation,
         max_rotation_angle=args.max_rotation_angle,
     )
+
+    # Create training dataset - either mixed with COCO or face-only
+    if args.coco_dir:
+        coco_images_dir = os.path.join(args.coco_dir, "train2017")
+        coco_ann_file = os.path.join(
+            args.coco_dir, "annotations", "instances_train2017.json"
+        )
+
+        if os.path.exists(coco_images_dir) and os.path.exists(coco_ann_file):
+            coco_dataset = COCONoHumanDataset(
+                coco_images_dir,
+                coco_ann_file,
+                transform=transform,
+                target_size=args.target_size,
+            )
+            train_dataset = MixedDataset(
+                face_train_dataset,
+                coco_dataset,
+                ratio=args.coco_ratio,
+            )
+            print(f"COCO dataset: {len(coco_dataset)} images (no humans)")
+            print(f"Mix ratio: {args.coco_ratio} COCO images per 1 face image")
+        else:
+            print(
+                f"Warning: COCO paths not found: {coco_images_dir} or {coco_ann_file}"
+            )
+            print("Training with face dataset only")
+            train_dataset = face_train_dataset
+    else:
+        train_dataset = face_train_dataset
     val_dataset = CelebADataset(
         args.data_dir,
         transform=transform,
@@ -156,7 +200,12 @@ def main():
         num_workers=args.num_workers,
     )
 
-    print(f"Train dataset: {len(train_dataset)} images")
+    if args.coco_dir and "coco_dataset" in locals():
+        print(
+            f"Train dataset: {len(train_dataset)} images ({len(face_train_dataset)} face + {len(coco_dataset)} COCO at {args.coco_ratio}:1 ratio)"
+        )
+    else:
+        print(f"Train dataset: {len(train_dataset)} images")
     print(f"Val dataset:   {len(val_dataset)} images")
 
     model = MobileFaceDetector()
@@ -197,6 +246,8 @@ def main():
         "max_rotation_angle": args.max_rotation_angle,
         "checkpoint_dir": args.checkpoint_dir,
         "log_file": args.log_file,
+        "coco_dir": args.coco_dir if args.coco_dir else "None",
+        "coco_ratio": args.coco_ratio if args.coco_dir else "N/A",
     }
 
     model = train_model(

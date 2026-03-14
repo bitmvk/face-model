@@ -4,6 +4,7 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 def calculate_iou(pred_box, true_box):
@@ -47,11 +48,15 @@ def _write_log_header(log_file, config):
         f.write(f"Batch Size: {config.get('batch_size', 32)}\n")
         f.write(f"Target IoU: {config.get('target_iou', 80.0)}%\n")
         f.write(f"Target Eye Accuracy: {config.get('target_eye_acc', 80.0)}%\n")
+        f.write(f"Landmark Weight: {config.get('landmark_weight', 5.0)}\n")
         f.write(f"Device: {config.get('device', 'cuda')}\n")
         f.write(f"Dataset: {config.get('data_dir', 'N/A')}\n")
         f.write(f"Target Size: {config.get('target_size', 256)}\n")
         f.write(f"Train Samples: {config.get('train_samples', 'N/A')}\n")
         f.write(f"Val Samples: {config.get('val_samples', 'N/A')}\n")
+        if config.get("coco_dir") and config["coco_dir"] != "None":
+            f.write(f"COCO Dataset: {config['coco_dir']}\n")
+            f.write(f"COCO Ratio: {config.get('coco_ratio', 'N/A')}:1\n")
         f.write("-" * 80 + "\n")
         f.write("Augmentation Settings:\n")
         f.write(f"  Scale Augmentation: {config.get('augment_scale', True)}\n")
@@ -116,10 +121,11 @@ def train_model(
     checkpoint_interval = config.get("checkpoint_interval", 10)
     train_only_head = config.get("train_only_head", False)
     log_file = config.get("log_file", None)
+    landmark_weight = config.get("landmark_weight", 5.0)
 
     model = model.to(device)
 
-    head_layers = [model.shared_features, model.reg_head]
+    head_layers = [model.shared_features, model.reg_head, model.conf_head]
     if train_only_head:
         for param in model.parameters():
             param.requires_grad = False
@@ -136,8 +142,8 @@ def train_model(
         optimizer, mode="min", factor=0.5, patience=3
     )
 
-    criterion_reg = nn.SmoothL1Loss()
-    landmark_weight = 5.0
+    criterion_bbox = nn.SmoothL1Loss(reduction="none")
+    criterion_eyes = nn.SmoothL1Loss(reduction="none")
 
     if log_file:
         os.makedirs(
@@ -154,21 +160,47 @@ def train_model(
         epoch_start = time.time()
         model.train()
         total_train_loss = 0
-        for batch_idx, (images, targets, _) in enumerate(train_loader):
+        total_conf_loss = 0
+        total_coord_loss = 0
+
+        for batch_idx, (images, targets, has_face) in enumerate(train_loader):
             images = images.to(device)
             targets = targets.to(device)
+            has_face = has_face.to(device).float()
 
             optimizer.zero_grad()
-            outputs = model(images)
 
-            loss_bbox = criterion_reg(outputs[:, :4], targets[:, :4])
-            loss_eyes = criterion_reg(outputs[:, 4:8], targets[:, 4:8])
-            loss = loss_bbox + (loss_eyes * landmark_weight)
+            coords_pred, conf_logits = model(images)
+
+            conf_loss = F.binary_cross_entropy_with_logits(
+                conf_logits.squeeze(1), has_face
+            )
+
+            mask = has_face.unsqueeze(1)
+
+            # Only compute coord loss and backprop through reg_head when faces exist
+            if mask.sum() > 0:
+                bbox_loss_element = criterion_bbox(coords_pred[:, :4], targets[:, :4])
+                bbox_loss = (bbox_loss_element * mask).sum() / (mask.sum() * 4)
+
+                eyes_loss_element = criterion_eyes(coords_pred[:, 4:8], targets[:, 4:8])
+                eyes_loss = (eyes_loss_element * mask).sum() / (mask.sum() * 4)
+
+                coord_loss = bbox_loss + landmark_weight * eyes_loss
+                loss = conf_loss + coord_loss
+            else:
+                # No faces in batch: only train conf_head
+                bbox_loss = torch.tensor(0.0, device=device)
+                eyes_loss = torch.tensor(0.0, device=device)
+                coord_loss = torch.tensor(0.0, device=device)
+                loss = conf_loss
 
             loss.backward()
             optimizer.step()
 
             total_train_loss += loss.item()
+            total_conf_loss += conf_loss.item()
+            total_coord_loss += coord_loss.item()
 
             if batch_idx % 10 == 0:
                 elapsed = time.time() - start_time
@@ -177,48 +209,89 @@ def train_model(
                 current_lr = optimizer.param_groups[0]["lr"]
                 print(
                     f"[{minutes:02d}:{seconds:02d}] Epoch {epoch + 1}, Batch {batch_idx}/{len(train_loader)}, "
-                    f"Loss: {loss.item():.4f}, LR: {current_lr:.6f}"
+                    f"Loss: {loss.item():.4f} (conf: {conf_loss.item():.4f}, coord: {coord_loss.item():.4f}), "
+                    f"LR: {current_lr:.6f}"
                 )
 
         avg_train_loss = total_train_loss / len(train_loader)
+        avg_conf_loss = total_conf_loss / len(train_loader)
+        avg_coord_loss = total_coord_loss / len(train_loader)
 
         model.eval()
         total_val_loss = 0
+        total_val_conf_loss = 0
+        total_val_coord_loss = 0
         iou_sum = 0
         left_eye_correct = 0
         right_eye_correct = 0
         total_samples = 0
+        total_face_samples = 0
 
         with torch.no_grad():
-            for images, targets, _ in val_loader:
+            for images, targets, has_face in val_loader:
                 images = images.to(device)
                 targets = targets.to(device)
+                has_face = has_face.to(device).float()
 
-                outputs = model(images)
+                coords_pred, conf_logits = model(images)
 
-                loss_bbox = criterion_reg(outputs[:, :4], targets[:, :4])
-                loss_eyes = criterion_reg(outputs[:, 4:8], targets[:, 4:8])
-                loss = loss_bbox + (loss_eyes * landmark_weight)
+                conf_loss = F.binary_cross_entropy_with_logits(
+                    conf_logits.squeeze(1), has_face
+                )
+                total_val_conf_loss += conf_loss.item()
 
+                mask = has_face.unsqueeze(1)
+
+                if mask.sum() > 0:
+                    bbox_loss_element = criterion_bbox(
+                        coords_pred[:, :4], targets[:, :4]
+                    )
+                    bbox_loss = (bbox_loss_element * mask).sum() / (mask.sum() * 4)
+                    eyes_loss_element = criterion_eyes(
+                        coords_pred[:, 4:8], targets[:, 4:8]
+                    )
+                    eyes_loss = (eyes_loss_element * mask).sum() / (mask.sum() * 4)
+                    coord_loss = bbox_loss + landmark_weight * eyes_loss
+                else:
+                    bbox_loss = torch.tensor(0.0, device=device)
+                    eyes_loss = torch.tensor(0.0, device=device)
+                    coord_loss = torch.tensor(0.0, device=device)
+
+                total_val_coord_loss += coord_loss.item()
+                loss = conf_loss + coord_loss
                 total_val_loss += loss.item()
 
-                ious = calculate_iou(outputs[:, :4], targets[:, :4])
-                iou_sum += ious.sum().item()
+                face_mask = has_face.bool()
+                if face_mask.any():
+                    face_coords_pred = coords_pred[face_mask]
+                    face_targets = targets[face_mask]
 
-                left_correct, right_correct = calculate_eye_accuracy(
-                    outputs[:, 4:8], targets[:, 4:8], threshold=0.01
-                )
-                left_eye_correct += left_correct
-                right_eye_correct += right_correct
+                    ious = calculate_iou(face_coords_pred[:, :4], face_targets[:, :4])
+                    iou_sum += ious.sum().item()
 
-                total_samples += targets.size(0)
+                    left_correct, right_correct = calculate_eye_accuracy(
+                        face_coords_pred[:, 4:8], face_targets[:, 4:8], threshold=0.01
+                    )
+                    left_eye_correct += left_correct
+                    right_eye_correct += right_correct
+
+                    total_face_samples += face_mask.sum().item()
+                total_samples += images.size(0)
 
         avg_val_loss = total_val_loss / len(val_loader)
-        mean_iou_pct = (iou_sum / total_samples) * 100
-        left_eye_acc_pct = (left_eye_correct / total_samples) * 100
-        right_eye_acc_pct = (right_eye_correct / total_samples) * 100
-        current_lr = optimizer.param_groups[0]["lr"]
+        avg_val_conf_loss = total_val_conf_loss / len(val_loader)
+        avg_val_coord_loss = total_val_coord_loss / len(val_loader)
 
+        if total_face_samples > 0:
+            mean_iou_pct = (iou_sum / total_face_samples) * 100
+            left_eye_acc_pct = (left_eye_correct / total_face_samples) * 100
+            right_eye_acc_pct = (right_eye_correct / total_face_samples) * 100
+        else:
+            mean_iou_pct = 0.0
+            left_eye_acc_pct = 0.0
+            right_eye_acc_pct = 0.0
+
+        current_lr = optimizer.param_groups[0]["lr"]
         scheduler.step(avg_val_loss)
 
         epoch_duration = time.time() - epoch_start
@@ -226,11 +299,11 @@ def train_model(
         print(
             f"[Epoch {epoch + 1}] "
             f"Duration: {epoch_duration:.1f}s | "
-            f"Train Loss: {avg_train_loss:.4f} | "
-            f"Val Loss: {avg_val_loss:.4f} | "
-            f"IoU: {mean_iou_pct:.2f}%% | "
-            f"Left Eye Acc: {left_eye_acc_pct:.2f}%% | "
-            f"Right Eye Acc: {right_eye_acc_pct:.2f}%% | "
+            f"Train Loss: {avg_train_loss:.4f} (conf: {avg_conf_loss:.4f}, coord: {avg_coord_loss:.4f}) | "
+            f"Val Loss: {avg_val_loss:.4f} (conf: {avg_val_conf_loss:.4f}, coord: {avg_val_coord_loss:.4f}) | "
+            f"IoU: {mean_iou_pct:.2f}% | "
+            f"Left Eye Acc: {left_eye_acc_pct:.2f}% | "
+            f"Right Eye Acc: {right_eye_acc_pct:.2f}% | "
             f"LR: {current_lr:.6f}"
         )
 

@@ -38,12 +38,14 @@ def extract_detection(
 ):
     """
     Convert model outputs (normalized in padded image) to original image coordinates.
+    outputs: tuple of (coords, conf_logits) as returned by MobileFaceDetector.
     """
     if target_size is None:
         target_size = TARGET_SIZE
 
-    outputs = outputs.squeeze(0).cpu().numpy()
-    x_norm, y_norm, w_norm, h_norm, lex_norm, ley_norm, rex_norm, rey_norm = outputs
+    coords, conf_logits = outputs
+    coords = coords.squeeze(0).cpu().numpy()
+    x_norm, y_norm, w_norm, h_norm, lex_norm, ley_norm, rex_norm, rey_norm = coords
 
     x_pad = x_norm * target_size
     y_pad = y_norm * target_size
@@ -63,7 +65,7 @@ def extract_detection(
     rex_orig = int((rex_pad - pad_left) / scale)
     rey_orig = int((rey_pad - pad_top) / scale)
 
-    conf = 1.0
+    conf = torch.sigmoid(conf_logits).squeeze().item()
     return (
         x_orig,
         y_orig,
