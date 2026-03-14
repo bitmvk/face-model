@@ -177,7 +177,7 @@ def main():
             train_dataset = face_train_dataset
     else:
         train_dataset = face_train_dataset
-    val_dataset = CelebADataset(
+    face_val_dataset = CelebADataset(
         args.data_dir,
         transform=transform,
         start_idx=200000,
@@ -186,6 +186,31 @@ def main():
         augment_scale=False,
         augment_rotation=False,
     )
+
+    if args.coco_dir:
+        coco_val_images_dir = os.path.join(args.coco_dir, "val2017")
+        coco_val_ann_file = os.path.join(
+            args.coco_dir, "annotations", "instances_val2017.json"
+        )
+
+        if os.path.exists(coco_val_images_dir) and os.path.exists(coco_val_ann_file):
+            coco_val_dataset = COCONoHumanDataset(
+                coco_val_images_dir,
+                coco_val_ann_file,
+                transform=transform,
+                target_size=args.target_size,
+            )
+            val_dataset = MixedDataset(
+                face_val_dataset,
+                coco_val_dataset,
+                ratio=args.coco_ratio,
+            )
+            print(f"COCO val dataset: {len(coco_val_dataset)} images (no humans)")
+        else:
+            print(f"Warning: COCO val paths not found. Using face-only val dataset.")
+            val_dataset = face_val_dataset
+    else:
+        val_dataset = face_val_dataset
 
     train_loader = DataLoader(
         train_dataset,
@@ -206,7 +231,12 @@ def main():
         )
     else:
         print(f"Train dataset: {len(train_dataset)} images")
-    print(f"Val dataset:   {len(val_dataset)} images")
+    if args.coco_dir and "coco_val_dataset" in locals():
+        print(
+            f"Val dataset:   {len(val_dataset)} images ({len(face_val_dataset)} face + {len(coco_val_dataset)} COCO at {args.coco_ratio}:1 ratio)"
+        )
+    else:
+        print(f"Val dataset:   {len(val_dataset)} images")
 
     model = MobileFaceDetector()
 

@@ -68,7 +68,16 @@ def _write_log_header(log_file, config):
 
 
 def _write_log_epoch(
-    log_file, epoch, epoch_duration, train_loss, val_loss, iou, left_acc, right_acc, lr
+    log_file,
+    epoch,
+    epoch_duration,
+    train_loss,
+    val_loss,
+    iou,
+    left_acc,
+    right_acc,
+    lr,
+    conf_acc,
 ):
     with open(log_file, "a") as f:
         f.write(
@@ -77,6 +86,7 @@ def _write_log_epoch(
             f"Train Loss: {train_loss:.4f} | "
             f"Val Loss: {val_loss:.4f} | "
             f"IoU: {iou:.2f}% | "
+            f"Conf Acc: {conf_acc:.2f}% | "
             f"Left Eye Acc: {left_acc:.2f}% | "
             f"Right Eye Acc: {right_acc:.2f}% | "
             f"LR: {lr:.6f}\n"
@@ -97,6 +107,7 @@ def _write_log_footer(log_file, config, final_epoch, total_duration, final_metri
         f.write(f"Final Train Loss: {final_metrics['train_loss']:.4f}\n")
         f.write(f"Final Val Loss: {final_metrics['val_loss']:.4f}\n")
         f.write(f"Final IoU: {final_metrics['iou']:.2f}%\n")
+        f.write(f"Final Conf Acc: {final_metrics['conf_acc']:.2f}%\n")
         f.write(f"Final Left Eye Acc: {final_metrics['left_eye_acc']:.2f}%\n")
         f.write(f"Final Right Eye Acc: {final_metrics['right_eye_acc']:.2f}%\n")
         f.write(f"Final LR: {final_metrics['lr']:.6f}\n")
@@ -226,6 +237,7 @@ def train_model(
         right_eye_correct = 0
         total_samples = 0
         total_face_samples = 0
+        conf_correct = 0
 
         with torch.no_grad():
             for images, targets, has_face in val_loader:
@@ -239,6 +251,9 @@ def train_model(
                     conf_logits.squeeze(1), has_face
                 )
                 total_val_conf_loss += conf_loss.item()
+
+                conf_preds = (torch.sigmoid(conf_logits.squeeze(1)) > 0.5).float()
+                conf_correct += (conf_preds == has_face).sum().item()
 
                 mask = has_face.unsqueeze(1)
 
@@ -291,6 +306,11 @@ def train_model(
             left_eye_acc_pct = 0.0
             right_eye_acc_pct = 0.0
 
+        if total_samples > 0:
+            conf_acc_pct = (conf_correct / total_samples) * 100
+        else:
+            conf_acc_pct = 0.0
+
         current_lr = optimizer.param_groups[0]["lr"]
         scheduler.step(avg_val_loss)
 
@@ -302,6 +322,7 @@ def train_model(
             f"Train Loss: {avg_train_loss:.4f} (conf: {avg_conf_loss:.4f}, coord: {avg_coord_loss:.4f}) | "
             f"Val Loss: {avg_val_loss:.4f} (conf: {avg_val_conf_loss:.4f}, coord: {avg_val_coord_loss:.4f}) | "
             f"IoU: {mean_iou_pct:.2f}% | "
+            f"Conf Acc: {conf_acc_pct:.2f}% | "
             f"Left Eye Acc: {left_eye_acc_pct:.2f}% | "
             f"Right Eye Acc: {right_eye_acc_pct:.2f}% | "
             f"LR: {current_lr:.6f}"
@@ -318,12 +339,14 @@ def train_model(
                 left_eye_acc_pct,
                 right_eye_acc_pct,
                 current_lr,
+                conf_acc_pct,
             )
 
         final_metrics = {
             "train_loss": avg_train_loss,
             "val_loss": avg_val_loss,
             "iou": mean_iou_pct,
+            "conf_acc": conf_acc_pct,
             "left_eye_acc": left_eye_acc_pct,
             "right_eye_acc": right_eye_acc_pct,
             "lr": current_lr,
