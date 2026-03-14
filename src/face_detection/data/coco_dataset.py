@@ -1,4 +1,5 @@
 import json
+from fractions import Fraction
 from pathlib import Path
 
 import torch
@@ -103,35 +104,42 @@ class COCONoHumanDataset(Dataset):
 class MixedDataset(Dataset):
     """
     Dataset that mixes two datasets at a specified ratio.
-    Samples 'ratio' items from dataset_b for every 1 item from dataset_a.
+    ratio is COCO-per-face and can be any positive float, including fractions < 1.
+
+    Examples:
+        ratio=2.0  → 1 face + 2 COCO per cycle  (2 COCO per face)
+        ratio=1.0  → 1 face + 1 COCO per cycle
+        ratio=0.5  → 2 face + 1 COCO per cycle  (1 COCO per 2 faces)
+        ratio=0.33 → 3 face + 1 COCO per cycle
 
     Args:
-        dataset_a: First dataset (e.g., CelebADataset with faces)
-        dataset_b: Second dataset (e.g., COCONoHumanDataset without faces)
-        ratio: Number of samples from dataset_b per 1 sample from dataset_a
+        dataset_a: Face dataset (CelebADataset)
+        dataset_b: No-face dataset (COCONoHumanDataset)
+        ratio (float): COCO images per face image. Supports fractions < 1.
     """
 
-    def __init__(self, dataset_a, dataset_b, ratio=2):
+    def __init__(self, dataset_a, dataset_b, ratio=2.0):
         self.dataset_a = dataset_a
         self.dataset_b = dataset_b
-        self.ratio = ratio
 
-        # Calculate total length
-        # For each sample in A, we take 'ratio' samples from B
+        # Express ratio as a fraction: num_b / num_a per cycle
+        frac = Fraction(ratio).limit_denominator(100)
+        self.num_a_per_cycle = frac.denominator  # face samples per cycle
+        self.num_b_per_cycle = frac.numerator    # COCO samples per cycle
+        self.cycle_size = self.num_a_per_cycle + self.num_b_per_cycle
+
         len_a = len(dataset_a)
         len_b = len(dataset_b)
 
-        # Determine how many complete cycles we can do
-        # Each cycle: 1 from A + ratio from B
-        max_cycles = min(len_a, len_b // ratio)
+        max_cycles = min(len_a // self.num_a_per_cycle, len_b // self.num_b_per_cycle)
         self.num_cycles = max_cycles
-        self.total_length = max_cycles * (1 + ratio)
+        self.total_length = max_cycles * self.cycle_size
 
         if max_cycles == 0:
             raise ValueError(
                 f"Not enough data to mix at ratio {ratio}: "
-                f"dataset_a has {len_a}, dataset_b has {len_b} "
-                f"(need at least {ratio} in B per 1 in A)"
+                f"dataset_a has {len_a} (need {self.num_a_per_cycle} per cycle), "
+                f"dataset_b has {len_b} (need {self.num_b_per_cycle} per cycle)"
             )
 
     def __len__(self):
@@ -143,14 +151,11 @@ class MixedDataset(Dataset):
                 f"Index {idx} out of range for dataset of size {self.total_length}"
             )
 
-        # Determine which cycle and position within cycle
-        cycle = idx // (1 + self.ratio)
-        position_in_cycle = idx % (1 + self.ratio)
+        cycle = idx // self.cycle_size
+        position = idx % self.cycle_size
 
-        if position_in_cycle == 0:
-            # Return from dataset_a
-            return self.dataset_a[cycle]
+        if position < self.num_a_per_cycle:
+            return self.dataset_a[cycle * self.num_a_per_cycle + position]
         else:
-            # Return from dataset_b
-            b_idx = cycle * self.ratio + (position_in_cycle - 1)
-            return self.dataset_b[b_idx]
+            b_pos = position - self.num_a_per_cycle
+            return self.dataset_b[cycle * self.num_b_per_cycle + b_pos]

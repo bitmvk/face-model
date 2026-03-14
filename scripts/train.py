@@ -116,9 +116,9 @@ def main():
     )
     parser.add_argument(
         "--coco_ratio",
-        type=int,
-        default=2,
-        help="Number of COCO images to use per face image (default: 2)",
+        type=float,
+        default=2.0,
+        help="COCO images per face image (default: 2.0, supports fractions e.g. 0.5)",
     )
     args = parser.parse_args()
 
