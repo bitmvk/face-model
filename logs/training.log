@@ -55,3 +55,9 @@ Augmentation Settings:
 [Epoch 013] Duration: 1924.4s | Train Loss: 0.2502 | Val Loss: 0.2321 | IoU: 44.42% | Conf Acc: 94.63% | Left Eye Acc: 14.69% | Right Eye Acc: 12.40% | LR: 0.005000
 [Epoch 014] Duration: 1925.1s | Train Loss: 0.2661 | Val Loss: 0.2671 | IoU: 7.48% | Conf Acc: 93.48% | Left Eye Acc: 3.49% | Right Eye Acc: 5.89% | LR: 0.005000
 [Epoch 015] Duration: 1911.0s | Train Loss: 0.2340 | Val Loss: 0.2301 | IoU: 44.81% | Conf Acc: 95.78% | Left Eye Acc: 4.03% | Right Eye Acc: 6.74% | LR: 0.005000
+[Epoch 016] Duration: 1939.7s | Train Loss: 0.2169 | Val Loss: 0.2753 | IoU: 32.55% | Conf Acc: 94.98% | Left Eye Acc: 0.74% | Right Eye Acc: 3.80% | LR: 0.005000
+[Epoch 017] Duration: 1983.0s | Train Loss: 0.2225 | Val Loss: 0.2024 | IoU: 40.46% | Conf Acc: 95.69% | Left Eye Acc: 12.25% | Right Eye Acc: 15.47% | LR: 0.005000
+[Epoch 018] Duration: 2010.7s | Train Loss: 0.2368 | Val Loss: 0.2205 | IoU: 36.44% | Conf Acc: 95.12% | Left Eye Acc: 12.67% | Right Eye Acc: 16.51% | LR: 0.005000
+[Epoch 019] Duration: 1931.6s | Train Loss: 0.2336 | Val Loss: 0.2666 | IoU: 34.09% | Conf Acc: 95.84% | Left Eye Acc: 0.23% | Right Eye Acc: 0.81% | LR: 0.005000
+[Epoch 020] Duration: 1711.5s | Train Loss: 0.2179 | Val Loss: 0.2400 | IoU: 38.25% | Conf Acc: 95.92% | Left Eye Acc: 1.36% | Right Eye Acc: 3.95% | LR: 0.005000
+[Epoch 021] Duration: 1634.7s | Train Loss: 0.2164 | Val Loss: 0.2035 | IoU: 46.31% | Conf Acc: 95.49% | Left Eye Acc: 12.95% | Right Eye Acc: 14.26% | LR: 0.005000
