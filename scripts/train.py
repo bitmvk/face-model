@@ -184,7 +184,7 @@ def main():
         max_samples=20000,
         target_size=args.target_size,
         augment_scale=False,
-        augment_rotation=False,
+        augment_rotation=True,
     )
 
     if args.coco_dir:

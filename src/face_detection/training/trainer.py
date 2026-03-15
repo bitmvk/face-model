@@ -150,7 +150,7 @@ def train_model(
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3
+        optimizer, mode="min", factor=0.5, patience=7
     )
 
     criterion_bbox = nn.SmoothL1Loss(reduction="none")
@@ -285,7 +285,7 @@ def train_model(
                     iou_sum += ious.sum().item()
 
                     left_correct, right_correct = calculate_eye_accuracy(
-                        face_coords_pred[:, 4:8], face_targets[:, 4:8], threshold=0.01
+                        face_coords_pred[:, 4:8], face_targets[:, 4:8], threshold=0.05
                     )
                     left_eye_correct += left_correct
                     right_eye_correct += right_correct
