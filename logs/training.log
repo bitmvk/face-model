@@ -61,3 +61,57 @@ Augmentation Settings:
 [Epoch 019] Duration: 1931.6s | Train Loss: 0.2336 | Val Loss: 0.2666 | IoU: 34.09% | Conf Acc: 95.84% | Left Eye Acc: 0.23% | Right Eye Acc: 0.81% | LR: 0.005000
 [Epoch 020] Duration: 1711.5s | Train Loss: 0.2179 | Val Loss: 0.2400 | IoU: 38.25% | Conf Acc: 95.92% | Left Eye Acc: 1.36% | Right Eye Acc: 3.95% | LR: 0.005000
 [Epoch 021] Duration: 1634.7s | Train Loss: 0.2164 | Val Loss: 0.2035 | IoU: 46.31% | Conf Acc: 95.49% | Left Eye Acc: 12.95% | Right Eye Acc: 14.26% | LR: 0.005000
+
+================================================================================
+Training Started: 2026-03-15 19:07:01
+================================================================================
+Model: MobileFaceDetector
+Pretrained: weights/mobile_face_detector_epoch_10.pth
+Train Only Head: False
+Learning Rate: 0.01
+Batch Size: 64
+Target IoU: 90.0%
+Target Eye Accuracy: 85.0%
+Landmark Weight: 5.0
+Device: cuda
+Dataset: Dataset/celebA
+Target Size: 256
+Train Samples: 208926
+Val Samples: 8883
+COCO Dataset: Dataset
+COCO Ratio: 0.35:1
+AFLW Dataset: Dataset/aflw/
+--------------------------------------------------------------------------------
+Augmentation Settings:
+  Scale Augmentation: True
+  Rotation Augmentation: True
+  Max Rotation Angle: 30 degrees
+================================================================================
+
+
+================================================================================
+Training Started: 2026-03-15 19:07:54
+================================================================================
+Model: MobileFaceDetector
+Pretrained: weights/mobile_face_detector_epoch_20.pth
+Train Only Head: False
+Learning Rate: 0.01
+Batch Size: 64
+Target IoU: 90.0%
+Target Eye Accuracy: 85.0%
+Landmark Weight: 5.0
+Device: cuda
+Dataset: Dataset/celebA
+Target Size: 256
+Train Samples: 208926
+Val Samples: 8883
+COCO Dataset: Dataset
+COCO Ratio: 0.35:1
+AFLW Dataset: Dataset/aflw/
+--------------------------------------------------------------------------------
+Augmentation Settings:
+  Scale Augmentation: True
+  Rotation Augmentation: True
+  Max Rotation Angle: 30 degrees
+================================================================================
+
