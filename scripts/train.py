@@ -296,7 +296,9 @@ def main():
             model.load_state_dict(backbone_state, strict=False)
             print(f"Loaded backbone weights. Head layers will be trained from scratch.")
         else:
-            model.load_state_dict(torch.load(args.pretrained, map_location=device))
+            model.load_state_dict(
+                torch.load(args.pretrained, map_location=device), strict=False
+            )
     elif args.pretrained:
         print(
             f"Warning: Pretrained file {args.pretrained} not found. Training from scratch."

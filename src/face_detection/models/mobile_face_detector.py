@@ -70,7 +70,12 @@ class MobileFaceDetector(nn.Module):
         )
 
         self.reg_head = nn.Linear(256, 8)
-        self.conf_head = nn.Linear(256, 1)
+
+        # conf_head branches directly from backbone output, before shared_features,
+        # so no-face (COCO) images don't corrupt the coordinate regression features.
+        self.conf_head = nn.Sequential(
+            nn.Linear(128 * 8 * 8, 64), nn.ReLU6(inplace=True), nn.Linear(64, 1)
+        )
 
     def forward(self, x):
         x = self.stem(x)
@@ -80,5 +85,5 @@ class MobileFaceDetector(nn.Module):
 
         features = self.shared_features(x)
         coords = self.reg_head(features)
-        conf_logits = self.conf_head(features)
+        conf_logits = self.conf_head(x)
         return coords, conf_logits
