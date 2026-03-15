@@ -250,6 +250,7 @@ dependencies = [
     { name = "opencv-python" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "pycocoedit" },
     { name = "tensorflow" },
     { name = "torch" },
     { name = "torchao" },
@@ -271,6 +272,7 @@ requires-dist = [
     { name = "opencv-python", specifier = ">=4.13.0.92" },
     { name = "pandas", specifier = ">=3.0.1" },
     { name = "pillow", specifier = ">=10.0.0" },
+    { name = "pycocoedit", specifier = ">=0.0.1" },
     { name = "tensorflow", specifier = ">=2.21.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "torchao", specifier = "==0.8.0" },
@@ -1220,6 +1222,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/3e/38ff2ddee5cc946f575c9d8cc822e34bde205cf61acf8099ad88ef19d7d2/protobuf-7.34.0-cp310-abi3-win32.whl", hash = "sha256:f791ec509707a1d91bd02e07df157e75e4fb9fbdad12a81b7396201ec244e2e3", size = 426628, upload-time = "2026-02-27T00:30:21.555Z" },
     { url = "https://files.pythonhosted.org/packages/cb/71/7c32eaf34a61a1bae1b62a2ac4ffe09b8d1bb0cf93ad505f42040023db89/protobuf-7.34.0-cp310-abi3-win_amd64.whl", hash = "sha256:9f9079f1dde4e32342ecbd1c118d76367090d4aaa19da78230c38101c5b3dd40", size = 437901, upload-time = "2026-02-27T00:30:22.836Z" },
     { url = "https://files.pythonhosted.org/packages/a4/e7/14dc9366696dcb53a413449881743426ed289d687bcf3d5aee4726c32ebb/protobuf-7.34.0-py3-none-any.whl", hash = "sha256:e3b914dd77fa33fa06ab2baa97937746ab25695f389869afdf03e81f34e45dc7", size = 170716, upload-time = "2026-02-27T00:30:23.994Z" },
+]
+
+[[package]]
+name = "pycocoedit"
+version = "0.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8b/4d/61a3e8b693db0e0df31c0df3b9a8eefa45b65da2bc892941bb0ec852f7d5/pycocoedit-0.0.1.tar.gz", hash = "sha256:53fa121a0228c155f1fff2579bb81508a0bc2563e9e4ddd88f30c2d6cbc42657", size = 10812, upload-time = "2025-05-27T14:27:25.336Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/05/b37fbe5224b44c2977afe861cba3c5b1154182910bb6e3f0d7767e13c20f/pycocoedit-0.0.1-py3-none-any.whl", hash = "sha256:247c5a2460f46ed0f5ba4c4dc2162ce3e23460f2f8b16c1edf1acd41d27b6741", size = 12128, upload-time = "2025-05-27T14:27:24.023Z" },
 ]
 
 [[package]]
