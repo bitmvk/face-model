@@ -10,9 +10,10 @@ import random
 
 import torch
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 
 from face_detection import (
+    AFLWDataset,
     CelebADataset,
     COCONoHumanDataset,
     MixedDataset,
@@ -120,6 +121,12 @@ def main():
         default=2.0,
         help="COCO images per face image (default: 2.0, supports fractions e.g. 0.5)",
     )
+    parser.add_argument(
+        "--aflw_dir",
+        type=str,
+        default=None,
+        help="Path to AFLW dataset root (contains data/aflw.sqlite and data/flickr/). If provided, AFLW faces are added to the face training set.",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -137,16 +144,34 @@ def main():
         ]
     )
 
+    AFLW_TRAIN_SPLIT = 14500
+
     face_train_dataset = CelebADataset(
         args.data_dir,
         transform=transform,
         start_idx=0,
-        max_samples=200000,
+        max_samples=195000,
         target_size=args.target_size,
         augment_scale=True,
         augment_rotation=args.augment_rotation,
         max_rotation_angle=args.max_rotation_angle,
     )
+
+    if args.aflw_dir:
+        aflw_train_dataset = AFLWDataset(
+            args.aflw_dir,
+            transform=transform,
+            start_idx=0,
+            max_samples=AFLW_TRAIN_SPLIT,
+            target_size=args.target_size,
+            augment_scale=True,
+            augment_rotation=args.augment_rotation,
+            max_rotation_angle=args.max_rotation_angle,
+        )
+        combined_face_train = ConcatDataset([face_train_dataset, aflw_train_dataset])
+        print(f"AFLW train dataset: {len(aflw_train_dataset)} images")
+    else:
+        combined_face_train = face_train_dataset
 
     # Create training dataset - either mixed with COCO or face-only
     if args.coco_dir:
@@ -163,7 +188,7 @@ def main():
                 target_size=args.target_size,
             )
             train_dataset = MixedDataset(
-                face_train_dataset,
+                combined_face_train,
                 coco_dataset,
                 ratio=args.coco_ratio,
             )
@@ -174,18 +199,34 @@ def main():
                 f"Warning: COCO paths not found: {coco_images_dir} or {coco_ann_file}"
             )
             print("Training with face dataset only")
-            train_dataset = face_train_dataset
+            train_dataset = combined_face_train
     else:
-        train_dataset = face_train_dataset
+        train_dataset = combined_face_train
+
     face_val_dataset = CelebADataset(
         args.data_dir,
         transform=transform,
-        start_idx=200000,
+        start_idx=195000,
         max_samples=20000,
         target_size=args.target_size,
         augment_scale=False,
-        augment_rotation=True,
+        augment_rotation=False,
     )
+
+    if args.aflw_dir:
+        aflw_val_dataset = AFLWDataset(
+            args.aflw_dir,
+            transform=transform,
+            start_idx=AFLW_TRAIN_SPLIT,
+            max_samples=None,
+            target_size=args.target_size,
+            augment_scale=False,
+            augment_rotation=False,
+        )
+        combined_face_val = ConcatDataset([face_val_dataset, aflw_val_dataset])
+        print(f"AFLW val dataset: {len(aflw_val_dataset)} images")
+    else:
+        combined_face_val = face_val_dataset
 
     if args.coco_dir:
         coco_val_images_dir = os.path.join(args.coco_dir, "val2017")
@@ -201,16 +242,16 @@ def main():
                 target_size=args.target_size,
             )
             val_dataset = MixedDataset(
-                face_val_dataset,
+                combined_face_val,
                 coco_val_dataset,
                 ratio=args.coco_ratio,
             )
             print(f"COCO val dataset: {len(coco_val_dataset)} images (no humans)")
         else:
             print(f"Warning: COCO val paths not found. Using face-only val dataset.")
-            val_dataset = face_val_dataset
+            val_dataset = combined_face_val
     else:
-        val_dataset = face_val_dataset
+        val_dataset = combined_face_val
 
     train_loader = DataLoader(
         train_dataset,
@@ -225,18 +266,20 @@ def main():
         num_workers=args.num_workers,
     )
 
+    face_train_count = len(combined_face_train)
+    face_val_count = len(combined_face_val)
     if args.coco_dir and "coco_dataset" in locals():
         print(
-            f"Train dataset: {len(train_dataset)} images ({len(face_train_dataset)} face + {len(coco_dataset)} COCO at {args.coco_ratio}:1 ratio)"
+            f"Train dataset: {len(train_dataset)} images ({face_train_count} face + {len(coco_dataset)} COCO at {args.coco_ratio}:1 ratio)"
         )
     else:
-        print(f"Train dataset: {len(train_dataset)} images")
+        print(f"Train dataset: {len(train_dataset)} images ({face_train_count} face)")
     if args.coco_dir and "coco_val_dataset" in locals():
         print(
-            f"Val dataset:   {len(val_dataset)} images ({len(face_val_dataset)} face + {len(coco_val_dataset)} COCO at {args.coco_ratio}:1 ratio)"
+            f"Val dataset:   {len(val_dataset)} images ({face_val_count} face + {len(coco_val_dataset)} COCO at {args.coco_ratio}:1 ratio)"
         )
     else:
-        print(f"Val dataset:   {len(val_dataset)} images")
+        print(f"Val dataset:   {len(val_dataset)} images ({face_val_count} face)")
 
     model = MobileFaceDetector()
 
@@ -278,6 +321,7 @@ def main():
         "log_file": args.log_file,
         "coco_dir": args.coco_dir if args.coco_dir else "None",
         "coco_ratio": args.coco_ratio if args.coco_dir else "N/A",
+        "aflw_dir": args.aflw_dir if args.aflw_dir else "None",
     }
 
     model = train_model(

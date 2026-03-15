@@ -1,4 +1,4 @@
-from face_detection.data import CelebADataset, COCONoHumanDataset, MixedDataset, default_annotation
+from face_detection.data import AFLWDataset, CelebADataset, COCONoHumanDataset, MixedDataset, default_annotation
 from face_detection.inference import TARGET_SIZE, extract_detection, letterbox_image
 from face_detection.models import InvertedResidual, MobileFaceDetector
 from face_detection.training import (
@@ -10,6 +10,7 @@ from face_detection.training import (
 __all__ = [
     "MobileFaceDetector",
     "InvertedResidual",
+    "AFLWDataset",
     "CelebADataset",
     "COCONoHumanDataset",
     "MixedDataset",

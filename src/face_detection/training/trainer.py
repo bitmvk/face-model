@@ -57,6 +57,8 @@ def _write_log_header(log_file, config):
         if config.get("coco_dir") and config["coco_dir"] != "None":
             f.write(f"COCO Dataset: {config['coco_dir']}\n")
             f.write(f"COCO Ratio: {config.get('coco_ratio', 'N/A')}:1\n")
+        if config.get("aflw_dir") and config["aflw_dir"] != "None":
+            f.write(f"AFLW Dataset: {config['aflw_dir']}\n")
         f.write("-" * 80 + "\n")
         f.write("Augmentation Settings:\n")
         f.write(f"  Scale Augmentation: {config.get('augment_scale', True)}\n")
