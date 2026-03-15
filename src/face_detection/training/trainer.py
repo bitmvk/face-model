@@ -78,6 +78,7 @@ def _write_log_epoch(
     right_acc,
     lr,
     conf_acc,
+    eye_threshold,
 ):
     with open(log_file, "a") as f:
         f.write(
@@ -89,6 +90,7 @@ def _write_log_epoch(
             f"Conf Acc: {conf_acc:.2f}% | "
             f"Left Eye Acc: {left_acc:.2f}% | "
             f"Right Eye Acc: {right_acc:.2f}% | "
+            f"Eye Threshold: {eye_threshold:.2f} | "
             f"LR: {lr:.6f}\n"
         )
 
@@ -165,6 +167,7 @@ def train_model(
 
     start_time = time.time()
     final_metrics = {}
+    eye_threshold = 0.05
 
     epoch = start_epoch
     while True:
@@ -285,7 +288,7 @@ def train_model(
                     iou_sum += ious.sum().item()
 
                     left_correct, right_correct = calculate_eye_accuracy(
-                        face_coords_pred[:, 4:8], face_targets[:, 4:8], threshold=0.05
+                        face_coords_pred[:, 4:8], face_targets[:, 4:8], threshold=eye_threshold
                     )
                     left_eye_correct += left_correct
                     right_eye_correct += right_correct
@@ -311,6 +314,14 @@ def train_model(
         else:
             conf_acc_pct = 0.0
 
+        avg_eye_acc_pct = (left_eye_acc_pct + right_eye_acc_pct) / 2
+        if avg_eye_acc_pct >= 80:
+            eye_threshold = 0.01
+        elif avg_eye_acc_pct >= 60:
+            eye_threshold = 0.03
+        elif avg_eye_acc_pct >= 50:
+            eye_threshold = 0.04
+
         current_lr = optimizer.param_groups[0]["lr"]
         scheduler.step(avg_val_loss)
 
@@ -325,6 +336,7 @@ def train_model(
             f"Conf Acc: {conf_acc_pct:.2f}% | "
             f"Left Eye Acc: {left_eye_acc_pct:.2f}% | "
             f"Right Eye Acc: {right_eye_acc_pct:.2f}% | "
+            f"Eye Threshold: {eye_threshold:.2f} | "
             f"LR: {current_lr:.6f}"
         )
 
@@ -340,6 +352,7 @@ def train_model(
                 right_eye_acc_pct,
                 current_lr,
                 conf_acc_pct,
+                eye_threshold,
             )
 
         final_metrics = {
